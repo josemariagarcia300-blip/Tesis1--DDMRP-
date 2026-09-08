@@ -115,7 +115,7 @@ sns.barplot(x='Familia', y='value', hue='variable', data=pd.melt(df, id_vars=['F
 ax_buffer.set_title('Comparación de Flujo Disponible vs. Tope de Buffer por Familia')
 ax_buffer.set_xlabel('Familia')
 ax_buffer.set_ylabel('Cantidad')
-ax_buffer.tick_params(axis='x', rotation=45, ha='right')
+ax_buffer.tick_params(axis='x', rotation=45)
 ax_buffer.legend(title='Métrica')
 plt.tight_layout()
 st.pyplot(fig_buffer)
@@ -180,7 +180,7 @@ def generar_resumen_general(dataframe):
         resumen['Acción'].append('Liquidar Exceso')
         resumen['Unidades_Impactadas'].append(max(0, int(unidades_exceso)))
         resumen['Familias_Impactadas'].append(df_exceso['Familia'].tolist())
-        
+
     resumen_df = pd.DataFrame(resumen)
     return resumen_df
 
