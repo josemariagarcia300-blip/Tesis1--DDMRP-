@@ -88,3 +88,47 @@ print("--- MOTOR DDMRP APLICADO A DATOS REALES ---")
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 1000)
 print(df[columnas_tesis].to_markdown(index=False))
+File "/mount/src/tesis1--ddmrp-/app.py", line 90, in <module>
+    print(df[columnas_tesis].to_markdown(index=False))
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/core/frame.py", line 2983, in to_markdown
+    tabulate = import_optional_dependency("tabulate")
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/compat/_optional.py", line 161, in import_optional_dependency
+    raise ImportError(msg) from err
+def generar_resumen_general(dataframe):
+    resumen = {
+        'Acción': [],
+        'Unidades_Impactadas': [],
+        'Familias_Impactadas': []
+    }
+
+    # Acciones de reposición (CRÍTICO y PRECAUCIÓN)
+    df_critico_precaucion = dataframe[dataframe['Semaforo_Comercial'].isin([
+        "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto",
+        "🟡 PRECAUCIÓN: En Reposición / No promocionar"
+    ])]
+    if not df_critico_precaucion.empty:
+        resumen['Acción'].append('Reponer Inventario')
+        resumen['Unidades_Impactadas'].append(df_critico_precaucion['Punto_Reposicion'].sum() - df_critico_precaucion['Flujo_Disponible'].sum())
+        resumen['Familias_Impactadas'].append(df_critico_precaucion['Familia'].tolist())
+
+    # Acciones de campaña (SALUDABLE)
+    df_saludable = dataframe[dataframe['Semaforo_Comercial'] == "🟢 SALUDABLE: Venta Libre / Push de Marketing"]
+    if not df_saludable.empty:
+        resumen['Acción'].append('Promocionar / Campañas')
+        resumen['Unidades_Impactadas'].append(df_saludable['Flujo_Disponible'].sum() - df_saludable['Punto_Reposicion'].sum())
+        resumen['Familias_Impactadas'].append(df_saludable['Familia'].tolist())
+
+    # Acciones de liquidación (EXCESO)
+    df_exceso = dataframe[dataframe['Semaforo_Comercial'] == "🟠 EXCESO: Sugerir Liquidación / Combo"]
+    if not df_exceso.empty:
+        resumen['Acción'].append('Liquidar Exceso')
+        resumen['Unidades_Impactadas'].append(df_exceso['Flujo_Disponible'].sum() - df_exceso['Tope_Buffer'].sum())
+        resumen['Familias_Impactadas'].append(df_exceso['Familia'].tolist())
+        
+    resumen_df = pd.DataFrame(resumen)
+    return resumen_df
+
+resumen_final = generar_resumen_general(df)
+print("--- Resumen General de Acciones Sugeridas ---")
+display(resumen_final.to_markdown(index=False))
