@@ -1,16 +1,20 @@
-# Código completo del cuaderno para GitHub
-
-
-
-
-# CELL_ID: lUoTZql5EB3K
-# CELL_TYPE: python
-
-```python
+import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# 1. TUS DATOS REALES (Base de la tesis)
+# --- Configuración de la Página de Streamlit ---
+st.set_page_config(
+    page_title="Análisis DDMRP de Familias de Productos",
+    layout="wide", # Usa un layout "wide" para mejor visualización
+    initial_sidebar_state="expanded"
+)
+
+st.title("📈 Análisis DDMRP de Familias de Productos")
+st.markdown("Una herramienta interactiva para la gestión de inventarios basada en la metodología Demand Driven MRP.")
+
+# --- 1. TUS DATOS REALES (Base de la tesis) ---
 data = {
     'Familia': ['BILLETERA', 'CASACA', 'CARTERA', 'MORRAL', 'CORREA', 'MONEDERO', 'MOCHILA', 'ZAPATO', 'OTRAS_18'],
     'Venta_Soles': [1407357, 936994, 833176, 594924, 213614, 173627, 108392, 99848, 77197],
@@ -18,7 +22,7 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# 2. ENRIQUECIMIENTO DE DATOS (Cálculos reales + Simulación inteligente)
+# --- 2. ENRIQUECIMIENTO DE DATOS (Cálculos reales + Simulación inteligente) ---
 # Calculamos el precio promedio real por unidad
 df['Precio_Promedio'] = (df['Venta_Soles'] / df['Unidades_Vendidas']).round(2)
 
@@ -40,7 +44,7 @@ df['Lead_Time'] = df['Familia'].map(lambda x: perfiles[x]['LT'])
 df['Factor_Variabilidad'] = df['Familia'].map(lambda x: perfiles[x]['Factor_Var'])
 df['MOQ'] = df['Familia'].map(lambda x: perfiles[x]['MOQ'])
 
-# 3. CÁLCULOS DDMRP (El Motor)
+# --- 3. CÁLCULOS DDMRP (El Motor) ---
 # Asumimos una ventana de análisis de 90 días para el ADU (Average Daily Usage)
 dias_analisis = 90
 df['ADU'] = (df['Unidades_Vendidas'] / dias_analisis).round(2)
@@ -63,7 +67,7 @@ df['Zona_Verde'] = df.apply(lambda row: max(
 df['Tope_Buffer'] = (df['Zona_Roja_Total'] + df['Zona_Amarilla'] + df['Zona_Verde']).round(1)
 df['Punto_Reposicion'] = (df['Zona_Roja_Total'] + df['Zona_Amarilla']).round(1)
 
-# 4. SIMULACIÓN DE ESTADO ACTUAL (Para el Dashboard Comercial)
+# --- 4. SIMULACIÓN DE ESTADO ACTUAL (Para el Dashboard Comercial) ---
 # Simulamos un Stock físico y una Demanda Calificada (pedidos en mano) aleatorios pero realistas
 np.random.seed(42)
 df['Stock_Fisico'] = np.random.randint(df['Zona_Roja_Total'], df['Tope_Buffer'] * 1.2).astype(int)
@@ -73,7 +77,7 @@ df['Demanda_Calificada'] = np.random.randint(0, df['Zona_Amarilla']).astype(int)
 # Ecuación de Flujo Disponible (Net Flow Position)
 df['Flujo_Disponible'] = df['Stock_Fisico'] + df['Ordenes_Transito'] - df['Demanda_Calificada']
 
-# 5. LÓGICA DEL SEMÁFORO COMERCIAL (Traducción para el Área Comercial)
+# --- 5. LÓGICA DEL SEMÁFORO COMERCIAL (Traducción para el Área Comercial) ---
 def determinar_semaforo(row):
     if row['Flujo_Disponible'] <= row['Zona_Roja_Total']:
         return "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto"
@@ -86,68 +90,60 @@ def determinar_semaforo(row):
 
 df['Semaforo_Comercial'] = df.apply(determinar_semaforo, axis=1)
 
-# 6. MOSTRAR RESULTADOS (Seleccionamos las columnas más relevantes para la tesis)
+# --- 6. MOSTRAR RESULTADOS (Columnas relevantes para la tesis) ---
 columnas_tesis = [
     'Familia', 'Perfil_DDMRP', 'ADU', 'Lead_Time', 'Factor_Variabilidad',
     'Zona_Roja_Total', 'Zona_Amarilla', 'Punto_Reposicion', 'Tope_Buffer',
     'Stock_Fisico', 'Flujo_Disponible', 'Semaforo_Comercial'
 ]
 
-print("--- MOTOR DDMRP APLICADO A DATOS REALES ---")
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
-print(df[columnas_tesis].to_markdown(index=False))
-```
+st.subheader("Tabla Resumen DDMRP")
+st.dataframe(df[columnas_tesis])
 
 
-# CELL_ID: 808bb125
-# CELL_TYPE: markdown
-
-```markdown
-### 1. Interfaz para seleccionar una Familia y mostrar su información
-
-Podemos usar un `interact` de `ipywidgets` para simular un selector de botón. Selecciona una familia de la lista y verás su información detallada.
-```
-
-
-# CELL_ID: 848670c0
-# CELL_TYPE: python
-
-```python
-from ipywidgets import interact, Dropdown
-from IPython.display import display
-
-def mostrar_info_familia(familia_seleccionada):
-    info_familia = df[df['Familia'] == familia_seleccionada][columnas_tesis]
-    print(f"\n--- Información detallada para {familia_seleccionada} ---")
-    display(info_familia.to_markdown(index=False))
-
-# Crear un dropdown con las familias disponibles
-familias_dropdown = Dropdown(
-    options=df['Familia'].tolist(),
-    description='Selecciona una Familia:',
-    disabled=False,
+# --- Visualización 1: Comparación de Flujo Disponible vs. Tope de Buffer ---
+st.subheader("📊 Comparación de Flujo Disponible vs. Tope de Buffer por Familia")
+st.markdown(
+    "Este gráfico de barras muestra:\n\n"+
+    "*   **Flujo_Disponible** (azul): Representa el inventario real disponible, ajustado por pedidos en tránsito y demanda comprometida.\n"+
+    "*   **Tope_Buffer** (naranja): Es el nivel máximo deseado del buffer de inventario, incluyendo las zonas Roja, Amarilla y Verde, que indica la capacidad máxima de inventario antes de considerarse un exceso.\n\n"+
+    "Al comparar estas dos métricas, se puede identificar visualmente qué familias tienen un inventario por debajo, dentro o por encima de su nivel óptimo, ayudando a tomar decisiones sobre reabastecimiento o liquidación de stock."
 )
 
-# Vincular la función con el dropdown
-interact(mostrar_info_familia, familia_seleccionada=familias_dropdown);
-```
+fig_buffer, ax_buffer = plt.subplots(figsize=(12, 6))
+sns.barplot(x='Familia', y='value', hue='variable', data=pd.melt(df, id_vars=['Familia'], value_vars=['Flujo_Disponible', 'Tope_Buffer']), ax=ax_buffer)
+ax_buffer.set_title('Comparación de Flujo Disponible vs. Tope de Buffer por Familia')
+ax_buffer.set_xlabel('Familia')
+ax_buffer.set_ylabel('Cantidad')
+ax_buffer.tick_params(axis='x', rotation=45, ha='right')
+ax_buffer.legend(title='Métrica')
+plt.tight_layout()
+st.pyplot(fig_buffer)
 
+# --- Visualización 2: Resumen de Artículos por Estado de Semáforo Comercial ---
+st.subheader("🚦 Resumen de Artículos por Estado de Semáforo Comercial")
+st.markdown("Esta tabla muestra la cantidad de familias de productos en cada estado del semáforo comercial (Crítico, Precaución, Exceso, Saludable).")
+st.dataframe(df['Semaforo_Comercial'].value_counts().reset_index().rename(columns={'index': 'Estado del Semáforo', 'Semaforo_Comercial': 'Cantidad de Familias'}))
 
-# CELL_ID: 38e24caf
-# CELL_TYPE: markdown
+# --- Interfaz Interactiva para seleccionar una Familia y mostrar su información ---
+st.subheader("🔍 Información Detallada por Familia (Interactiva)")
+st.markdown("Selecciona una familia de la lista desplegable para ver su información DDMRP detallada.")
 
-```markdown
-### 2. Resumen General de Acciones (General Overview)
+familia_seleccionada = st.selectbox(
+    'Selecciona una Familia:',
+    options=df['Familia'].tolist(),
+    index=0 # Default to the first family
+)
 
-Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.
-```
+if familia_seleccionada:
+    info_familia = df[df['Familia'] == familia_seleccionada][columnas_tesis]
+    st.write(f"#### Información detallada para {familia_seleccionada}")
+    st.dataframe(info_familia)
 
+# --- Resumen General de Acciones Sugeridas ---
+st.subheader("📋 Resumen General de Acciones Sugeridas")
+st.markdown("Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.")
 
-# CELL_ID: b24c272f
-# CELL_TYPE: python
-
-```python
 def generar_resumen_general(dataframe):
     resumen = {
         'Acción': [],
@@ -161,70 +157,32 @@ def generar_resumen_general(dataframe):
         "🟡 PRECAUCIÓN: En Reposición / No promocionar"
     ])]
     if not df_critico_precaucion.empty:
+        # Para unidades impactadas, calcular cuánto falta para el Punto_Reposicion o Zona_Roja_Total
+        unidades_necesarias = (df_critico_precaucion['Punto_Reposicion'] - df_critico_precaucion['Flujo_Disponible']).sum()
         resumen['Acción'].append('Reponer Inventario')
-        resumen['Unidades_Impactadas'].append(df_critico_precaucion['Punto_Reposicion'].sum() - df_critico_precaucion['Flujo_Disponible'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_necesarias)))
         resumen['Familias_Impactadas'].append(df_critico_precaucion['Familia'].tolist())
 
     # Acciones de campaña (SALUDABLE)
     df_saludable = dataframe[dataframe['Semaforo_Comercial'] == "🟢 SALUDABLE: Venta Libre / Push de Marketing"]
     if not df_saludable.empty:
+        # Para unidades impactadas, calcular el excedente sobre el Punto_Reposicion (mantener saludable)
+        unidades_disponibles = (df_saludable['Flujo_Disponible'] - df_saludable['Punto_Reposicion']).sum()
         resumen['Acción'].append('Promocionar / Campañas')
-        resumen['Unidades_Impactadas'].append(df_saludable['Flujo_Disponible'].sum() - df_saludable['Punto_Reposicion'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_disponibles)))
         resumen['Familias_Impactadas'].append(df_saludable['Familia'].tolist())
 
     # Acciones de liquidación (EXCESO)
     df_exceso = dataframe[dataframe['Semaforo_Comercial'] == "🟠 EXCESO: Sugerir Liquidación / Combo"]
     if not df_exceso.empty:
+        # Para unidades impactadas, calcular el excedente sobre el Tope_Buffer
+        unidades_exceso = (df_exceso['Flujo_Disponible'] - df_exceso['Tope_Buffer']).sum()
         resumen['Acción'].append('Liquidar Exceso')
-        resumen['Unidades_Impactadas'].append(df_exceso['Flujo_Disponible'].sum() - df_exceso['Tope_Buffer'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_exceso)))
         resumen['Familias_Impactadas'].append(df_exceso['Familia'].tolist())
         
     resumen_df = pd.DataFrame(resumen)
     return resumen_df
 
 resumen_final = generar_resumen_general(df)
-print("--- Resumen General de Acciones Sugeridas ---")
-display(resumen_final.to_markdown(index=False))
-```
-
-
-# CELL_ID: 4bf89c9d
-# CELL_TYPE: python
-
-```python
-print("--- Resumen de Artículos por Estado de Semáforo Comercial ---")
-print(df['Semaforo_Comercial'].value_counts().to_markdown())
-```
-
-
-# CELL_ID: 6b236405
-# CELL_TYPE: python
-
-```python
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-plt.figure(figsize=(14, 7))
-sns.barplot(x='Familia', y='value', hue='variable', data=pd.melt(df, id_vars=['Familia'], value_vars=['Flujo_Disponible', 'Tope_Buffer']))
-
-plt.title('Comparación de Flujo Disponible vs. Tope de Buffer por Familia')
-plt.xlabel('Familia')
-plt.ylabel('Cantidad')
-plt.xticks(rotation=45, ha='right')
-plt.legend(title='Métrica')
-plt.tight_layout()
-plt.show()
-```
-
-
-# CELL_ID: bdcdce6f
-# CELL_TYPE: markdown
-
-```markdown
-Este gráfico de barras muestra:
-
-*   **Flujo_Disponible** (azul): Representa el inventario real disponible, ajustado por pedidos en tránsito y demanda comprometida.
-*   **Tope_Buffer** (naranja): Es el nivel máximo deseado del buffer de inventario, incluyendo las zonas Roja, Amarilla y Verde, que indica la capacidad máxima de inventario antes de considerarse un exceso.
-
-Al comparar estas dos métricas, se puede identificar visualmente qué familias tienen un inventario por debajo, dentro o por encima de su nivel óptimo, ayudando a tomar decisiones sobre reabastecimiento o liquidación de stock.
-```
+st.dataframe(resumen_final)
