@@ -87,6 +87,51 @@ def determinar_semaforo(row):
 
 df['Semaforo_Comercial'] = df.apply(determinar_semaforo, axis=1)
 
+# --- NUEVOS CÁLCULOS PARA EL MÓDULO DE INVENTARIO ---
+# Calcular Venta Anualizada en Unidades (para Rotación)
+# Asumiendo que 'Unidades_Vendidas' es para 90 días, anualizamos
+df['Venta_Anualizada_Unidades'] = (df['Unidades_Vendidas'] / dias_analisis) * 365
+
+# Calcular Rotación de Inventario (Venta Anualizada / Stock Físico)
+# Manejar el caso de Stock_Fisico = 0 para evitar divisiones por cero
+df['Rotacion_Inventario'] = df.apply(lambda row: \
+    (row['Venta_Anualizada_Unidades'] / row['Stock_Fisico']) if row['Stock_Fisico'] > 0 else np.inf, axis=1).round(2)
+
+# Calcular Valor Monetario del Stock Físico Actual
+df['Valor_Inventario_Actual'] = (df['Stock_Fisico'] * df['Precio_Promedio']).round(2)
+
+# Clasificación ABC
+# Basada en el 'Venta_Soles' (valor anual de ventas)
+df_abc = df.sort_values(by='Venta_Soles', ascending=False).copy()
+df_abc['Venta_Acumulada'] = df_abc['Venta_Soles'].cumsum()
+df_abc['Porcentaje_Venta_Acumulada'] = (df_abc['Venta_Acumulada'] / df_abc['Venta_Soles'].sum()) * 100
+
+def clasificar_abc(porcentaje):
+    if porcentaje <= 80:
+        return 'A'
+    elif porcentaje <= 95:
+        return 'B'
+    else:
+        return 'C'
+
+df_abc['Clasificacion_ABC'] = df_abc['Porcentaje_Venta_Acumulada'].apply(clasificar_abc)
+
+# Unir la clasificación ABC de nuevo al DataFrame original
+df = df.merge(df_abc[['Familia', 'Clasificacion_ABC']], on='Familia', how='left')
+
+# Nueva lógica de semáforo para Stock Físico en Inventario
+def determinar_semaforo_stock_fisico(row):
+    if row['Stock_Fisico'] <= row['Zona_Roja_Total']:
+        return "🔴 Stock Crítico"
+    elif row['Stock_Fisico'] <= row['Punto_Reposicion']:
+        return "🟡 Stock en Precaución"
+    elif row['Stock_Fisico'] <= row['Tope_Buffer']:
+        return "🟢 Stock Saludable"
+    else:
+        return "🔵 Stock en Exceso"
+
+df['Semaforo_Stock_Fisico'] = df.apply(determinar_semaforo_stock_fisico, axis=1)
+
 # --- Columnas relevantes para la tesis ---
 columnas_tesis = [
     'Familia', 'Perfil_DDMRP', 'ADU', 'Lead_Time', 'Factor_Variabilidad',
@@ -211,8 +256,29 @@ elif modulo_seleccionado == 'Operatividad':
     st.write("Contenido para Operatividad (Próximamente)...")
 
 elif modulo_seleccionado == 'Inventario':
-    st.title("Módulo de Inventario")
-    st.write("Contenido para Inventario (Próximamente)...")
+    st.title("📦 Módulo de Inventario")
+    st.markdown("Análisis detallado del inventario, incluyendo clasificación ABC, rotación de productos y estado de stock físico.")
+
+    st.subheader("📊 Análisis de Inventario (Clasificación ABC, Rotación y Estado de Stock)")
+    st.markdown(
+        "Aquí se presenta un análisis de inventario con las siguientes métricas:\n\n" +
+        "*   **Stock_Fisico**: Cantidad actual de unidades en inventario.\n" +
+        "*   **Semaforo_Stock_Fisico**: Indicador visual del estado del stock físico (🔴 Crítico, 🟡 Precaución, 🟢 Saludable, 🔵 Exceso) en relación con los niveles de buffer DDMRP.\n" +
+        "*   **Clasificacion_ABC**: Categorización de los productos basada en su valor de ventas anual. " +
+        "Los productos 'A' son los más valiosos (representan hasta el 80% de las ventas), " +
+        "'B' son los siguientes (hasta el 95%), y 'C' son el resto.\n" +
+        "*   **Rotacion_Inventario**: Mide cuántas veces el inventario promedio se vende y se reemplaza en un año. " +
+        "Una rotación alta generalmente indica una buena gestión de inventario, mientras que una baja podría señalar exceso de stock o baja demanda.\n" +
+        "*   **Valor_Inventario_Actual**: El valor monetario total del stock físico actual de cada familia de productos."
+    )
+
+    # Columnas relevantes para el módulo de Inventario
+    columnas_inventario = [
+        'Familia', 'Stock_Fisico', 'Semaforo_Stock_Fisico',
+        'Clasificacion_ABC', 'Venta_Anualizada_Unidades',
+        'Rotacion_Inventario', 'Valor_Inventario_Actual'
+    ]
+    st.dataframe(df[columnas_inventario].sort_values(by='Clasificacion_ABC')) # Ordenar por ABC para mejor visualización
 
 elif modulo_seleccionado == 'Distribución':
     st.title("Módulo de Distribución")
