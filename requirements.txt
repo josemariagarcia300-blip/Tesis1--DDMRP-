@@ -1,0 +1,7 @@
+print("""
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+""")
