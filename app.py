@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from datetime import date, timedelta
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(
@@ -10,6 +11,10 @@ st.set_page_config(
     layout="wide", # Usa un layout "wide" para mejor visualización
     initial_sidebar_state="expanded"
 )
+
+# Inicializar estado para la alerta de pago
+if 'pago_impuestos_pendiente' not in st.session_state:
+    st.session_state.pago_impuestos_pendiente = False
 
 # --- 1. TUS DATOS REALES (Base de la tesis) ---
 data = {
@@ -132,6 +137,43 @@ def determinar_semaforo_stock_fisico(row):
 
 df['Semaforo_Stock_Fisico'] = df.apply(determinar_semaforo_stock_fisico, axis=1)
 
+# --- CÁLCULOS PARA EL NUEVO MÓDULO DE FINANZAS ---
+def calcular_finanzas_reposicion(dataframe):
+    df_necesita_reposicion = dataframe[dataframe['Semaforo_Comercial'].isin([
+        "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto",
+        "🟡 PRECAUCIÓN: En Reposición / No promocionar"
+    ])].copy()
+
+    if not df_necesita_reposicion.empty:
+        today = date.today()
+        df_necesita_reposicion['Fecha_Reposicion_Estimada'] = df_necesita_reposicion.apply(
+            lambda row: today + timedelta(days=row['Lead_Time']),
+            axis=1
+        )
+        df_necesita_reposicion['Fecha_Pago_Tentativa'] = df_necesita_reposicion['Fecha_Reposicion_Estimada'] + timedelta(days=30)
+
+        # Calculo de impuestos y ad-valorem (ejemplo simplificado)
+        # Asumimos que se repone el MOQ y el costo es el Precio_Promedio
+        IGV_RATE = 0.18 # 18% IGV
+        AD_VALOREM_RATE = 0.05 # 5% Ad Valorem
+
+        df_necesita_reposicion['Costo_MOQ'] = df_necesita_reposicion['MOQ'] * df_necesita_reposicion['Precio_Promedio']
+        df_necesita_reposicion['Impuestos_IGV'] = df_necesita_reposicion['Costo_MOQ'] * IGV_RATE
+        df_necesita_reposicion['Impuestos_AdValorem'] = df_necesita_reposicion['Costo_MOQ'] * AD_VALOREM_RATE
+        df_necesita_reposicion['Total_Impuestos_Pagar'] = (df_necesita_reposicion['Impuestos_IGV'] + df_necesita_reposicion['Impuestos_AdValorem']).round(2)
+    else:
+        return pd.DataFrame(columns=[
+            'Familia', 'Fecha_Reposicion_Estimada', 'Fecha_Pago_Tentativa',
+            'Total_Impuestos_Pagar', 'MOQ'
+        ])
+
+    return df_necesita_reposicion[[
+        'Familia', 'Fecha_Reposicion_Estimada', 'Fecha_Pago_Tentativa',
+        'Total_Impuestos_Pagar', 'MOQ'
+    ]]
+
+df_finanzas = calcular_finanzas_reposicion(df)
+
 # --- Columnas relevantes para la tesis ---
 columnas_tesis = [
     'Familia', 'Perfil_DDMRP', 'ADU', 'Lead_Time', 'Factor_Variabilidad',
@@ -185,9 +227,21 @@ resumen_final = generar_resumen_general(df)
 
 # --- Sidebar Navigation ---
 st.sidebar.header("Módulos Principales")
+
+# Añadir contador de alertas al módulo de Finanzas
+finanzas_label = 'Finanzas'
+if st.session_state.pago_impuestos_pendiente:
+    total_impuestos_pendientes = df_finanzas[df_finanzas['Fecha_Reposicion_Estimada'] <= date.today()]['Total_Impuestos_Pagar'].sum()
+    if total_impuestos_pendientes > 0:
+        finanzas_label = f"Finanzas <span style='color:red;'>({total_impuestos_pendientes:.2f} S/)</span>"
+    else:
+        # Reset the alert if no pending payments found
+        st.session_state.pago_impuestos_pendiente = False
+
 modulo_seleccionado = st.sidebar.radio(
     "Ir a",
-    ['Comercialización', 'Operatividad', 'Inventario', 'Distribución']
+    ['Comercialización', finanzas_label, 'Inventario', 'Distribución'],
+    format_func=lambda x: x if not '<span' in x else x.split('<span')[0],
 )
 
 # --- Content Area based on Main Module Selection ---
@@ -251,9 +305,36 @@ if modulo_seleccionado == 'Comercialización':
         st.markdown("Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.")
         st.dataframe(resumen_final)
 
-elif modulo_seleccionado == 'Operatividad':
-    st.title("Módulo de Operatividad")
-    st.write("Contenido para Operatividad (Próximamente)...")
+elif modulo_seleccionado == finanzas_label:
+    st.title("💰 Módulo de Finanzas")
+    st.markdown("Aquí puedes visualizar las fechas de reposición, pagos tentativos de crédito e impuestos relacionados con las órdenes de compra.")
+
+    st.subheader("📅 Fechas de Reposición y Pagos")
+    st.markdown(
+        "Esta tabla muestra las fechas clave para la planificación financiera de reposiciones:\n\n" +
+        "*   **Fecha_Reposicion_Estimada**: La fecha aproximada en la que el producto reordenado debería llegar al almacén.\n" +
+        "*   **Fecha_Pago_Tentativa**: La fecha estimada en que se realizará el pago al agente de carga, considerando un crédito de 30 días.\n" +
+        "*   **Total_Impuestos_Pagar**: El monto estimado de impuestos (IGV y Ad Valorem) que deben ser pagados al momento del arribo de la mercadería (pago en efectivo).
+" +
+        "*   **MOQ**: Las unidades mínimas a ordenar por familia."
+    )
+
+    if not df_finanzas.empty:
+        st.dataframe(df_finanzas.sort_values(by='Fecha_Reposicion_Estimada'))
+
+        st.subheader("🚨 Alerta de Pagos Inmediatos (Impuestos)")
+        st.markdown("Los siguientes ítems han llegado o están por llegar y requieren el pago inmediato de impuestos y ad valorem.")
+        df_impuestos_pendientes = df_finanzas[df_finanzas['Fecha_Reposicion_Estimada'] <= date.today()]
+
+        if not df_impuestos_pendientes.empty:
+            st.error("¡ALERTA! Impuestos y Ad Valorem pendientes de pago para las siguientes familias:")
+            st.dataframe(df_impuestos_pendientes[['Familia', 'Fecha_Reposicion_Estimada', 'Total_Impuestos_Pagar']])
+            st.session_state.pago_impuestos_pendiente = True
+        else:
+            st.success("No hay impuestos pendientes de pago por arribo de mercadería hoy.")
+            st.session_state.pago_impuestos_pendiente = False
+    else:
+        st.info("No hay reposiciones programadas que requieran análisis financiero en este momento.")
 
 elif modulo_seleccionado == 'Inventario':
     st.title("📦 Módulo de Inventario")
@@ -279,6 +360,43 @@ elif modulo_seleccionado == 'Inventario':
         'Rotacion_Inventario', 'Valor_Inventario_Actual'
     ]
     st.dataframe(df[columnas_inventario].sort_values(by='Clasificacion_ABC')) # Ordenar por ABC para mejor visualización
+
+    st.subheader("🛒 Gestión de Reposición (Clase A)")
+    st.markdown("Selecciona familias de 'Clase A' que requieren reposición para enviar una orden de compra simulada a Finanzas y Comercial.")
+
+    df_clase_a_necesidad = df[
+        (df['Clasificacion_ABC'] == 'A') &
+        (df['Semaforo_Comercial'].isin([
+            "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto",
+            "🟡 PRECAUCIÓN: En Reposición / No promocionar"
+        ]))
+    ][['Familia', 'Semaforo_Comercial', 'Stock_Fisico', 'Punto_Reposicion', 'MOQ']]
+
+    if not df_clase_a_necesidad.empty:
+        st.dataframe(df_clase_a_necesidad)
+
+        familias_a_reponer = st.multiselect(
+            "Selecciona las familias 'Clase A' a reponer:",
+            options=df_clase_a_necesidad['Familia'].tolist()
+        )
+
+        if familias_a_reponer:
+            st.markdown("#### Detalles de la Orden Propuesta:")
+            orden_propuesta = []
+            for familia in familias_a_reponer:
+                moq = df_clase_a_necesidad[df_clase_a_necesidad['Familia'] == familia]['MOQ'].iloc[0]
+                orden_propuesta.append({'Familia': familia, 'Cantidad_MOQ': int(moq)})
+
+            st.dataframe(pd.DataFrame(orden_propuesta))
+
+            if st.button("Simular Envío de Orden a Finanzas/Comercial"):
+                st.session_state.pago_impuestos_pendiente = True
+                st.success("Orden simulada enviada. Verifica el módulo de Finanzas para detalles de pago.")
+        else:
+            st.info("Selecciona una o más familias para proponer una orden de reposición.")
+
+    else:
+        st.info("No hay familias 'Clase A' en estado crítico o de precaución que requieran reposición en este momento.")
 
 elif modulo_seleccionado == 'Distribución':
     st.title("Módulo de Distribución")
