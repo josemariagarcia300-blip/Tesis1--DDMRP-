@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(
-    page_title="Análisis DDMRP de Familias de Productos",
+    page_title="Análisis DDMRP de Familias de Productos - Comercial",
     layout="wide", # Usa un layout "wide" para mejor visualización
     initial_sidebar_state="expanded"
 )
@@ -264,22 +264,19 @@ if st.session_state.pago_impuestos_pendiente:
 
 modulo_seleccionado = st.sidebar.radio(
     "Ir a",
-    ['Comercialización', finanzas_label, 'Inventario', 'Distribución'],
+    ['Comercial', finanzas_label, 'Inventario', 'Distribución'],
     format_func=lambda x: x if not '<span' in x else x.split('<span')[0],
 )
 
 # --- Content Area based on Main Module Selection ---
-if modulo_seleccionado == 'Comercialización':
-    st.title("📈 Análisis DDMRP de Familias de Productos - Comercialización")
+if modulo_seleccionado == 'Comercial':
+    st.title("📈 Análisis DDMRP de Familias de Productos - Comercial")
     st.markdown("Una herramienta interactiva para la gestión de inventarios basada en la metodología Demand Driven MRP para el área comercial.")
+    # Imagen para el módulo Comercial (Reemplazar 'path/to/imagen_comercial.png' con tu ruta real)
+    st.image("https://i.imgur.com/example_comercial.png", caption="Módulo Comercial", width=150)
 
-    st.sidebar.header("Secciones de Comercialización")
-    seccion_comercializacion = st.sidebar.radio(
-        "Ver",
-        ['Dashboard', 'Detalle de Familias', 'Resumen de Acciones', 'Otras Secciones (Próximamente)']
-    )
-
-    if seccion_comercializacion == 'Dashboard':
+    # Submódulos como expanders
+    with st.expander("Dashboard"): # Anteriormente: if seccion_comercializacion == 'Dashboard':
         st.subheader("Tabla Resumen DDMRP")
         st.dataframe(df[columnas_tesis])
 
@@ -307,7 +304,7 @@ if modulo_seleccionado == 'Comercialización':
         st.markdown("Esta tabla muestra la cantidad de familias de productos en cada estado del semáforo comercial (Crítico, Precaución, Exceso, Saludable).")
         st.dataframe(df['Semaforo_Comercial'].value_counts().reset_index().rename(columns={'index': 'Estado del Semáforo', 'Semaforo_Comercial': 'Cantidad de Familias'}))
 
-    elif seccion_comercializacion == 'Detalle de Familias':
+    with st.expander("Detalle de Familias"): # Anteriormente: elif seccion_comercializacion == 'Detalle de Familias':
         # --- Interfaz Interactiva para seleccionar una Familia y mostrar su información ---
         st.subheader("🔍 Información Detallada por Familia (Interactiva)")
         st.markdown("Selecciona una familia de la lista para ver su información DDMRP detallada.")
@@ -323,7 +320,7 @@ if modulo_seleccionado == 'Comercialización':
             st.write(f"#### Información detallada para {familia_seleccionada}")
             st.dataframe(info_familia)
 
-    elif seccion_comercializacion == 'Resumen de Acciones':
+    with st.expander("Resumen de Acciones"): # Anteriormente: elif seccion_comercializacion == 'Resumen de Acciones':
         # --- Resumen General de Acciones Sugeridas ---
         st.subheader("📋 Resumen General de Acciones Sugeridas")
         st.markdown("Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.")
@@ -332,6 +329,8 @@ if modulo_seleccionado == 'Comercialización':
 elif modulo_seleccionado == finanzas_label:
     st.title("💰 Módulo de Finanzas")
     st.markdown("Aquí puedes visualizar las fechas de reposición, pagos tentativos de crédito e impuestos relacionados con las órdenes de compra.")
+    # Imagen para el módulo Finanzas (Reemplazar 'path/to/imagen_finanzas.png' con tu ruta real)
+    st.image("https://i.imgur.com/example_finanzas.png", caption="Módulo Finanzas", width=150)
 
     st.subheader("📅 Fechas de Reposición y Pagos")
     st.markdown("""
@@ -363,6 +362,8 @@ elif modulo_seleccionado == finanzas_label:
 elif modulo_seleccionado == 'Inventario':
     st.title("📦 Módulo de Inventario")
     st.markdown("Análisis detallado del inventario, incluyendo clasificación ABC, rotación de productos y estado de stock físico.")
+    # Imagen para el módulo Inventario (Reemplazar 'path/to/imagen_inventario.png' con tu ruta real)
+    st.image("https://i.imgur.com/example_inventario.png", caption="Módulo Inventario", width=150)
 
     st.subheader("📊 Análisis de Inventario (Clasificación ABC, Rotación y Estado de Stock)")
     st.markdown(
@@ -425,6 +426,8 @@ elif modulo_seleccionado == 'Inventario':
 elif modulo_seleccionado == 'Distribución':
     st.title("🚚 Módulo de Distribución")
     st.markdown("Visualiza el stock simulado de cada familia de productos en diferentes tiendas.")
+    # Imagen para el módulo Distribución (Reemplazar 'path/to/imagen_distribucion.png' con tu ruta real)
+    st.image("https://i.imgur.com/example_distribucion.png", caption="Módulo Distribución", width=150)
 
     st.subheader("📍 Stock por Tienda")
     st.markdown("Selecciona una tienda para ver el stock simulado de cada familia de productos en esa ubicación.")
