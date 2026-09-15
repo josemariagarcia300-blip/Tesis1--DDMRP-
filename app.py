@@ -310,14 +310,14 @@ elif modulo_seleccionado == finanzas_label:
     st.markdown("Aquí puedes visualizar las fechas de reposición, pagos tentativos de crédito e impuestos relacionados con las órdenes de compra.")
 
     st.subheader("📅 Fechas de Reposición y Pagos")
-    st.markdown(
-        "Esta tabla muestra las fechas clave para la planificación financiera de reposiciones:\n\n" +
-        "*   **Fecha_Reposicion_Estimada**: La fecha aproximada en la que el producto reordenado debería llegar al almacén.\n" +
-        "*   **Fecha_Pago_Tentativa**: La fecha estimada en que se realizará el pago al agente de carga, considerando un crédito de 30 días.\n" +
-        "*   **Total_Impuestos_Pagar**: El monto estimado de impuestos (IGV y Ad Valorem) que deben ser pagados al momento del arribo de la mercadería (pago en efectivo).
-" +
-        "*   **MOQ**: Las unidades mínimas a ordenar por familia."
-    )
+    st.markdown("""
+        Esta tabla muestra las fechas clave para la planificación financiera de reposiciones:
+
+        *   **Fecha_Reposicion_Estimada**: La fecha aproximada en la que el producto reordenado debería llegar al almacén.
+        *   **Fecha_Pago_Tentativa**: La fecha estimada en que se realizará el pago al agente de carga, considerando un crédito de 30 días.
+        *   **Total_Impuestos_Pagar**: El monto estimado de impuestos (IGV y Ad Valorem) que deben ser pagados al momento del arribo de la mercadería (pago en efectivo).
+        *   **MOQ**: Las unidades mínimas a ordenar por familia.
+    """)
 
     if not df_finanzas.empty:
         st.dataframe(df_finanzas.sort_values(by='Fecha_Reposicion_Estimada'))
