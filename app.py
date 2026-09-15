@@ -9,7 +9,85 @@ from datetime import date, timedelta
 st.set_page_config(
     page_title="Análisis DDMRP de Familias de Productos",
     layout="wide", # Usa un layout "wide" para mejor visualización
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    theme="dark" # Set Streamlit's built-in dark theme
+)
+
+# Custom CSS for a more "pro" dark theme (similar to draconssa.com)
+st.markdown(
+    """
+    <style>
+    /* Main app container */
+    .stApp {
+        background-color: #1A1A1A; /* Very dark gray */
+        color: #E0E0E0; /* Light gray for general text */
+    }
+    /* Sidebar container - specific Streamlit class. Might need adjustment if Streamlit updates. */
+    /* Using a more general approach for sidebar background, relying on Streamlit's 'dark' theme for this */
+
+    /* General text color for markdown, etc. */
+    p, div, span {
+        color: #E0E0E0;
+    }
+    /* Headers */
+    h1, h2, h3, h4, h5, h6 {
+        color: #FFFFFF; /* White for headers */
+    }
+    /* Dataframes - General styling for pandas dataframes displayed by st.dataframe */
+    .st-emotion-cache-l2jthg.ezrtsby2, .st-emotion-cache-zt5ig.ezrtsby2 { /* These are generic wrappers for dataframes */
+        background-color: #262626; /* Darker background for dataframes */
+    }
+    .dataframe {
+        background-color: #262626 !important;
+        color: #E0E0E0 !important;
+    }
+    .dataframe th {
+        background-color: #333333 !important;
+        color: #FFFFFF !important;
+    }
+    .dataframe td {
+        background-color: #262626 !important;
+        color: #E0E0E0 !important;
+    }
+    .dataframe tbody tr:nth-child(even) td { /* Alternate row color */
+        background-color: #2e2e2e !important;
+    }
+    /* Selectbox styling */
+    .st-emotion-cache-f1gqag.e1fqkh3o3, .st-emotion-cache-1q1w1p.ed8z4x00 { /* Selectbox container */
+        background-color: #333333;
+        color: #E0E0E0;
+    }
+    .st-emotion-cache-1wq0f4n.e1tzq5u10 input[type="text"] { /* Selectbox input field */
+        background-color: #333333 !important;
+        color: #E0E0E0 !important;
+    }
+    .st-emotion-cache-1n74xq8.e1tzq5u12 div[role="listbox"] { /* Selectbox dropdown list */
+        background-color: #333333;
+        color: #E0E0E0;
+    }
+    /* Buttons */
+    .stButton>button {
+        background-color: #007bff; /* A professional blue */
+        color: white;
+        border: none;
+        border-radius: 5px;
+        padding: 10px 20px;
+    }
+    .stButton>button:hover {
+        background-color: #0056b3; /* Darker blue on hover */
+    }
+    /* Alerts */
+    .stAlert {
+        background-color: #331A1A; /* Dark red background for error */
+        color: #E0E0E0;
+        border-left: 5px solid #FF0000;
+    }
+    .stAlert > div > p {
+        color: #E0E0E0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
 # Inicializar estado para la alerta de pago
@@ -150,6 +228,9 @@ def calcular_finanzas_reposicion(dataframe):
             lambda row: today + timedelta(days=row['Lead_Time']),
             axis=1
         )
+        # Force one item to be pending for demonstration purposes
+        df_necesita_reposicion.loc[df_necesita_reposicion.index[0], 'Fecha_Reposicion_Estimada'] = today
+
         df_necesita_reposicion['Fecha_Pago_Tentativa'] = df_necesita_reposicion['Fecha_Reposicion_Estimada'] + timedelta(days=30)
 
         # Calculo de impuestos y ad-valorem (ejemplo simplificado)
