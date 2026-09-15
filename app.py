@@ -1,3 +1,4 @@
+!pip install streamlit
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,8 +10,7 @@ from datetime import date, timedelta
 st.set_page_config(
     page_title="Análisis DDMRP de Familias de Productos",
     layout="wide", # Usa un layout "wide" para mejor visualización
-    initial_sidebar_state="expanded",
-    theme="dark" # Set Streamlit's built-in dark theme
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS for a more "pro" dark theme (similar to draconssa.com)
