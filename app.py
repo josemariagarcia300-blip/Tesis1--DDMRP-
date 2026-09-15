@@ -26,63 +26,63 @@ st.markdown(
     /* Using a more general approach for sidebar background, relying on Streamlit's 'dark' theme for this */
 
     /* General text color for markdown, etc. */
-    p, div, span {
+p, div, span {
         color: #E0E0E0;
     }
     /* Headers */
-    h1, h2, h3, h4, h5, h6 {
+h1, h2, h3, h4, h5, h6 {
         color: #FFFFFF; /* White for headers */
     }
     /* Dataframes - General styling for pandas dataframes displayed by st.dataframe */
-    .st-emotion-cache-l2jthg.ezrtsby2, .st-emotion-cache-zt5ig.ezrtsby2 { /* These are generic wrappers for dataframes */
+.st-emotion-cache-l2jthg.ezrtsby2, .st-emotion-cache-zt5ig.ezrtsby2 { /* These are generic wrappers for dataframes */
         background-color: #262626; /* Darker background for dataframes */
     }
-    .dataframe {
+.dataframe {
         background-color: #262626 !important;
         color: #E0E0E0 !important;
     }
-    .dataframe th {
+.dataframe th {
         background-color: #333333 !important;
         color: #FFFFFF !important;
     }
-    .dataframe td {
+.dataframe td {
         background-color: #262626 !important;
         color: #E0E0E0 !important;
     }
-    .dataframe tbody tr:nth-child(even) td { /* Alternate row color */
+.dataframe tbody tr:nth-child(even) td { /* Alternate row color */
         background-color: #2e2e2e !important;
     }
     /* Selectbox styling */
-    .st-emotion-cache-f1gqag.e1fqkh3o3, .st-emotion-cache-1q1w1p.ed8z4x00 { /* Selectbox container */
+.st-emotion-cache-f1gqag.e1fqkh3o3, .st-emotion-cache-1q1w1p.ed8z4x00 { /* Selectbox container */
         background-color: #333333;
         color: #E0E0E0;
     }
-    .st-emotion-cache-1wq0f4n.e1tzq5u10 input[type="text"] { /* Selectbox input field */
+.st-emotion-cache-1wq0f4n.e1tzq5u10 input[type="text"] { /* Selectbox input field */
         background-color: #333333 !important;
         color: #E0E0E0 !important;
     }
-    .st-emotion-cache-1n74xq8.e1tzq5u12 div[role="listbox"] { /* Selectbox dropdown list */
+.st-emotion-cache-1n74xq8.e1tzq5u12 div[role="listbox"] { /* Selectbox dropdown list */
         background-color: #333333;
         color: #E0E0E0;
     }
     /* Buttons */
-    .stButton>button {
+.stButton>button {
         background-color: #007bff; /* A professional blue */
         color: white;
         border: none;
         border-radius: 5px;
         padding: 10px 20px;
     }
-    .stButton>button:hover {
+.stButton>button:hover {
         background-color: #0056b3; /* Darker blue on hover */
     }
     /* Alerts */
-    .stAlert {
+.stAlert {
         background-color: #331A1A; /* Dark red background for error */
         color: #E0E0E0;
         border-left: 5px solid #FF0000;
     }
-    .stAlert > div > p {
+.stAlert > div > p {
         color: #E0E0E0;
     }
     </style>
