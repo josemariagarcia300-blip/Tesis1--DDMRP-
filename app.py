@@ -432,5 +432,6 @@ elif modulo_seleccionado == 'Distribución':
     )
 
     if tienda_seleccionada:
-        stock_tienda_actual = df_stock_tiendas[df_stock_tiendas['Tienda'] == tienda_seleccionada]
-        st.dataframe(stock_tienda_actual.set_index('Familia'))
+        st.write(f"### Stock detallado para {tienda_seleccionada}:")
+        stock_tienda_actual = df_stock_tiendas[df_stock_tiendas['Tienda'] == tienda_seleccionada].copy()
+        st.dataframe(stock_tienda_actual[['Familia', 'Stock_Tienda']].reset_index(drop=True))
