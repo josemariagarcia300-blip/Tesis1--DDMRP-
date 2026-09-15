@@ -1,16 +1,22 @@
-# Código completo del cuaderno para GitHub
-
-
-
-
-# CELL_ID: lUoTZql5EB3K
-# CELL_TYPE: python
-
-```python
+import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import date, timedelta
 
-# 1. TUS DATOS REALES (Base de la tesis)
+# --- Configuración de la Página de Streamlit ---
+st.set_page_config(
+    page_title="Análisis DDMRP de Familias de Productos",
+    layout="wide", # Usa un layout "wide" para mejor visualización
+    initial_sidebar_state="expanded"
+)
+
+# Inicializar estado para la alerta de pago
+if 'pago_impuestos_pendiente' not in st.session_state:
+    st.session_state.pago_impuestos_pendiente = False
+
+# --- 1. TUS DATOS REALES (Base de la tesis) ---
 data = {
     'Familia': ['BILLETERA', 'CASACA', 'CARTERA', 'MORRAL', 'CORREA', 'MONEDERO', 'MOCHILA', 'ZAPATO', 'OTRAS_18'],
     'Venta_Soles': [1407357, 936994, 833176, 594924, 213614, 173627, 108392, 99848, 77197],
@@ -18,7 +24,7 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# 2. ENRIQUECIMIENTO DE DATOS (Cálculos reales + Simulación inteligente)
+# --- 2. ENRIQUECIMIENTO DE DATOS (Cálculos reales + Simulación inteligente) ---
 # Calculamos el precio promedio real por unidad
 df['Precio_Promedio'] = (df['Venta_Soles'] / df['Unidades_Vendidas']).round(2)
 
@@ -40,7 +46,7 @@ df['Lead_Time'] = df['Familia'].map(lambda x: perfiles[x]['LT'])
 df['Factor_Variabilidad'] = df['Familia'].map(lambda x: perfiles[x]['Factor_Var'])
 df['MOQ'] = df['Familia'].map(lambda x: perfiles[x]['MOQ'])
 
-# 3. CÁLCULOS DDMRP (El Motor)
+# --- 3. CÁLCULOS DDMRP (El Motor) ---
 # Asumimos una ventana de análisis de 90 días para el ADU (Average Daily Usage)
 dias_analisis = 90
 df['ADU'] = (df['Unidades_Vendidas'] / dias_analisis).round(2)
@@ -63,7 +69,7 @@ df['Zona_Verde'] = df.apply(lambda row: max(
 df['Tope_Buffer'] = (df['Zona_Roja_Total'] + df['Zona_Amarilla'] + df['Zona_Verde']).round(1)
 df['Punto_Reposicion'] = (df['Zona_Roja_Total'] + df['Zona_Amarilla']).round(1)
 
-# 4. SIMULACIÓN DE ESTADO ACTUAL (Para el Dashboard Comercial)
+# --- 4. SIMULACIÓN DE ESTADO ACTUAL (Para el Dashboard Comercial) ---
 # Simulamos un Stock físico y una Demanda Calificada (pedidos en mano) aleatorios pero realistas
 np.random.seed(42)
 df['Stock_Fisico'] = np.random.randint(df['Zona_Roja_Total'], df['Tope_Buffer'] * 1.2).astype(int)
@@ -73,7 +79,7 @@ df['Demanda_Calificada'] = np.random.randint(0, df['Zona_Amarilla']).astype(int)
 # Ecuación de Flujo Disponible (Net Flow Position)
 df['Flujo_Disponible'] = df['Stock_Fisico'] + df['Ordenes_Transito'] - df['Demanda_Calificada']
 
-# 5. LÓGICA DEL SEMÁFORO COMERCIAL (Traducción para el Área Comercial)
+# --- 5. LÓGICA DEL SEMÁFORO COMERCIAL (Traducción para el Área Comercial) ---
 def determinar_semaforo(row):
     if row['Flujo_Disponible'] <= row['Zona_Roja_Total']:
         return "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto"
@@ -86,68 +92,96 @@ def determinar_semaforo(row):
 
 df['Semaforo_Comercial'] = df.apply(determinar_semaforo, axis=1)
 
-# 6. MOSTRAR RESULTADOS (Seleccionamos las columnas más relevantes para la tesis)
+# --- NUEVOS CÁLCULOS PARA EL MÓDULO DE INVENTARIO ---
+# Calcular Venta Anualizada en Unidades (para Rotación)
+# Asumiendo que 'Unidades_Vendidas' es para 90 días, anualizamos
+df['Venta_Anualizada_Unidades'] = (df['Unidades_Vendidas'] / dias_analisis) * 365
+
+# Calcular Rotación de Inventario (Venta Anualizada / Stock Físico)
+# Manejar el caso de Stock_Fisico = 0 para evitar divisiones por cero
+df['Rotacion_Inventario'] = df.apply(lambda row: \
+    (row['Venta_Anualizada_Unidades'] / row['Stock_Fisico']) if row['Stock_Fisico'] > 0 else np.inf, axis=1).round(2)
+
+# Calcular Valor Monetario del Stock Físico Actual
+df['Valor_Inventario_Actual'] = (df['Stock_Fisico'] * df['Precio_Promedio']).round(2)
+
+# Clasificación ABC
+# Basada en el 'Venta_Soles' (valor anual de ventas)
+df_abc = df.sort_values(by='Venta_Soles', ascending=False).copy()
+df_abc['Venta_Acumulada'] = df_abc['Venta_Soles'].cumsum()
+df_abc['Porcentaje_Venta_Acumulada'] = (df_abc['Venta_Acumulada'] / df_abc['Venta_Soles'].sum()) * 100
+
+def clasificar_abc(porcentaje):
+    if porcentaje <= 80:
+        return 'A'
+    elif porcentaje <= 95:
+        return 'B'
+    else:
+        return 'C'
+
+df_abc['Clasificacion_ABC'] = df_abc['Porcentaje_Venta_Acumulada'].apply(clasificar_abc)
+
+# Unir la clasificación ABC de nuevo al DataFrame original
+df = df.merge(df_abc[['Familia', 'Clasificacion_ABC']], on='Familia', how='left')
+
+# Nueva lógica de semáforo para Stock Físico en Inventario
+def determinar_semaforo_stock_fisico(row):
+    if row['Stock_Fisico'] <= row['Zona_Roja_Total']:
+        return "🔴 Stock Crítico"
+    elif row['Stock_Fisico'] <= row['Punto_Reposicion']:
+        return "🟡 Stock en Precaución"
+    elif row['Stock_Fisico'] <= row['Tope_Buffer']:
+        return "🟢 Stock Saludable"
+    else:
+        return "🔵 Stock en Exceso"
+
+df['Semaforo_Stock_Fisico'] = df.apply(determinar_semaforo_stock_fisico, axis=1)
+
+# --- CÁLCULOS PARA EL NUEVO MÓDULO DE FINANZAS ---
+def calcular_finanzas_reposicion(dataframe):
+    df_necesita_reposicion = dataframe[dataframe['Semaforo_Comercial'].isin([
+        "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto",
+        "🟡 PRECAUCIÓN: En Reposición / No promocionar"
+    ])].copy()
+
+    if not df_necesita_reposicion.empty:
+        today = date.today()
+        df_necesita_reposicion['Fecha_Reposicion_Estimada'] = df_necesita_reposicion.apply(
+            lambda row: today + timedelta(days=row['Lead_Time']),
+            axis=1
+        )
+        df_necesita_reposicion['Fecha_Pago_Tentativa'] = df_necesita_reposicion['Fecha_Reposicion_Estimada'] + timedelta(days=30)
+
+        # Calculo de impuestos y ad-valorem (ejemplo simplificado)
+        # Asumimos que se repone el MOQ y el costo es el Precio_Promedio
+        IGV_RATE = 0.18 # 18% IGV
+        AD_VALOREM_RATE = 0.05 # 5% Ad Valorem
+
+        df_necesita_reposicion['Costo_MOQ'] = df_necesita_reposicion['MOQ'] * df_necesita_reposicion['Precio_Promedio']
+        df_necesita_reposicion['Impuestos_IGV'] = df_necesita_reposicion['Costo_MOQ'] * IGV_RATE
+        df_necesita_reposicion['Impuestos_AdValorem'] = df_necesita_reposicion['Costo_MOQ'] * AD_VALOREM_RATE
+        df_necesita_reposicion['Total_Impuestos_Pagar'] = (df_necesita_reposicion['Impuestos_IGV'] + df_necesita_reposicion['Impuestos_AdValorem']).round(2)
+    else:
+        return pd.DataFrame(columns=[
+            'Familia', 'Fecha_Reposicion_Estimada', 'Fecha_Pago_Tentativa',
+            'Total_Impuestos_Pagar', 'MOQ'
+        ])
+
+    return df_necesita_reposicion[[
+        'Familia', 'Fecha_Reposicion_Estimada', 'Fecha_Pago_Tentativa',
+        'Total_Impuestos_Pagar', 'MOQ'
+    ]]
+
+df_finanzas = calcular_finanzas_reposicion(df)
+
+# --- Columnas relevantes para la tesis ---
 columnas_tesis = [
     'Familia', 'Perfil_DDMRP', 'ADU', 'Lead_Time', 'Factor_Variabilidad',
     'Zona_Roja_Total', 'Zona_Amarilla', 'Punto_Reposicion', 'Tope_Buffer',
     'Stock_Fisico', 'Flujo_Disponible', 'Semaforo_Comercial'
 ]
 
-print("--- MOTOR DDMRP APLICADO A DATOS REALES ---")
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 1000)
-print(df[columnas_tesis].to_markdown(index=False))
-```
-
-
-# CELL_ID: 808bb125
-# CELL_TYPE: markdown
-
-```markdown
-### 1. Interfaz para seleccionar una Familia y mostrar su información
-
-Podemos usar un `interact` de `ipywidgets` para simular un selector de botón. Selecciona una familia de la lista y verás su información detallada.
-```
-
-
-# CELL_ID: 848670c0
-# CELL_TYPE: python
-
-```python
-from ipywidgets import interact, Dropdown
-from IPython.display import display
-
-def mostrar_info_familia(familia_seleccionada):
-    info_familia = df[df['Familia'] == familia_seleccionada][columnas_tesis]
-    print(f"\n--- Información detallada para {familia_seleccionada} ---")
-    display(info_familia.to_markdown(index=False))
-
-# Crear un dropdown con las familias disponibles
-familias_dropdown = Dropdown(
-    options=df['Familia'].tolist(),
-    description='Selecciona una Familia:',
-    disabled=False,
-)
-
-# Vincular la función con el dropdown
-interact(mostrar_info_familia, familia_seleccionada=familias_dropdown);
-```
-
-
-# CELL_ID: 38e24caf
-# CELL_TYPE: markdown
-
-```markdown
-### 2. Resumen General de Acciones (General Overview)
-
-Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.
-```
-
-
-# CELL_ID: b24c272f
-# CELL_TYPE: python
-
-```python
+# --- Función para generar resumen general de acciones ---
 def generar_resumen_general(dataframe):
     resumen = {
         'Acción': [],
@@ -161,70 +195,242 @@ def generar_resumen_general(dataframe):
         "🟡 PRECAUCIÓN: En Reposición / No promocionar"
     ])]
     if not df_critico_precaucion.empty:
+        # Para unidades impactadas, calcular cuánto falta para el Punto_Reposicion o Zona_Roja_Total
+        unidades_necesarias = (df_critico_precaucion['Punto_Reposicion'] - df_critico_precaucion['Flujo_Disponible']).sum()
         resumen['Acción'].append('Reponer Inventario')
-        resumen['Unidades_Impactadas'].append(df_critico_precaucion['Punto_Reposicion'].sum() - df_critico_precaucion['Flujo_Disponible'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_necesarias)))
         resumen['Familias_Impactadas'].append(df_critico_precaucion['Familia'].tolist())
 
     # Acciones de campaña (SALUDABLE)
     df_saludable = dataframe[dataframe['Semaforo_Comercial'] == "🟢 SALUDABLE: Venta Libre / Push de Marketing"]
     if not df_saludable.empty:
+        # Para unidades impactadas, calcular el excedente sobre el Punto_Reposicion (mantener saludable)
+        unidades_disponibles = (df_saludable['Flujo_Disponible'] - df_saludable['Punto_Reposicion']).sum()
         resumen['Acción'].append('Promocionar / Campañas')
-        resumen['Unidades_Impactadas'].append(df_saludable['Flujo_Disponible'].sum() - df_saludable['Punto_Reposicion'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_disponibles)))
         resumen['Familias_Impactadas'].append(df_saludable['Familia'].tolist())
 
     # Acciones de liquidación (EXCESO)
     df_exceso = dataframe[dataframe['Semaforo_Comercial'] == "🟠 EXCESO: Sugerir Liquidación / Combo"]
     if not df_exceso.empty:
+        # Para unidades impactadas, calcular el excedente sobre el Tope_Buffer
+        unidades_exceso = (df_exceso['Flujo_Disponible'] - df_exceso['Tope_Buffer']).sum()
         resumen['Acción'].append('Liquidar Exceso')
-        resumen['Unidades_Impactadas'].append(df_exceso['Flujo_Disponible'].sum() - df_exceso['Tope_Buffer'].sum())
+        resumen['Unidades_Impactadas'].append(max(0, int(unidades_exceso)))
         resumen['Familias_Impactadas'].append(df_exceso['Familia'].tolist())
-        
+
     resumen_df = pd.DataFrame(resumen)
     return resumen_df
 
+# Generar el resumen general una vez
 resumen_final = generar_resumen_general(df)
-print("--- Resumen General de Acciones Sugeridas ---")
-display(resumen_final.to_markdown(index=False))
-```
 
+# --- Simulación de Stock por Tienda para el Módulo de Distribución ---
+np.random.seed(42) # Para reproducibilidad
+num_tiendas = 5
+tiendas = [f'Tienda N°{i+1}' for i in range(num_tiendas)]
 
-# CELL_ID: 4bf89c9d
-# CELL_TYPE: python
+lista_stock_tiendas = []
+for tienda in tiendas:
+    for _, row in df.iterrows():
+        # Simular stock de manera un poco más inteligente, relacionado con ADU o MOQ
+        # Por ejemplo, un rango entre 0 y 2 veces el MOQ o ADU * Lead_Time
+        min_stock = 0
+        max_stock = max(int(row['MOQ'] * 1.5), int(row['ADU'] * row['Lead_Time'] * 1.5), 10) # Asegurar un mínimo de 10
+        stock_simulado = np.random.randint(min_stock, max_stock + 1)
+        lista_stock_tiendas.append({
+            'Familia': row['Familia'],
+            'Tienda': tienda,
+            'Stock_Tienda': stock_simulado
+        })
 
-```python
-print("--- Resumen de Artículos por Estado de Semáforo Comercial ---")
-print(df['Semaforo_Comercial'].value_counts().to_markdown())
-```
+df_stock_tiendas = pd.DataFrame(lista_stock_tiendas)
 
+# --- Sidebar Navigation ---
+st.sidebar.header("Módulos Principales")
 
-# CELL_ID: 6b236405
-# CELL_TYPE: python
+# Añadir contador de alertas al módulo de Finanzas
+finanzas_label = 'Finanzas'
+if st.session_state.pago_impuestos_pendiente:
+    total_impuestos_pendientes = df_finanzas[df_finanzas['Fecha_Reposicion_Estimada'] <= date.today()]['Total_Impuestos_Pagar'].sum()
+    if total_impuestos_pendientes > 0:
+        finanzas_label = f"Finanzas <span style='color:red;'>({total_impuestos_pendientes:.2f} S/)</span>"
+    else:
+        # Reset the alert if no pending payments found
+        st.session_state.pago_impuestos_pendiente = False
 
-```python
-import matplotlib.pyplot as plt
-import seaborn as sns
+modulo_seleccionado = st.sidebar.radio(
+    "Ir a",
+    ['Comercialización', finanzas_label, 'Inventario', 'Distribución'],
+    format_func=lambda x: x if not '<span' in x else x.split('<span')[0],
+)
 
-plt.figure(figsize=(14, 7))
-sns.barplot(x='Familia', y='value', hue='variable', data=pd.melt(df, id_vars=['Familia'], value_vars=['Flujo_Disponible', 'Tope_Buffer']))
+# --- Content Area based on Main Module Selection ---
+if modulo_seleccionado == 'Comercialización':
+    st.title("📈 Análisis DDMRP de Familias de Productos - Comercialización")
+    st.markdown("Una herramienta interactiva para la gestión de inventarios basada en la metodología Demand Driven MRP para el área comercial.")
 
-plt.title('Comparación de Flujo Disponible vs. Tope de Buffer por Familia')
-plt.xlabel('Familia')
-plt.ylabel('Cantidad')
-plt.xticks(rotation=45, ha='right')
-plt.legend(title='Métrica')
-plt.tight_layout()
-plt.show()
-```
+    st.sidebar.header("Secciones de Comercialización")
+    seccion_comercializacion = st.sidebar.radio(
+        "Ver",
+        ['Dashboard', 'Detalle de Familias', 'Resumen de Acciones', 'Otras Secciones (Próximamente)']
+    )
 
+    if seccion_comercializacion == 'Dashboard':
+        st.subheader("Tabla Resumen DDMRP")
+        st.dataframe(df[columnas_tesis])
 
-# CELL_ID: bdcdce6f
-# CELL_TYPE: markdown
+        # --- Visualización 1: Comparación de Flujo Disponible vs. Tope de Buffer ---
+        st.subheader("📊 Comparación de Flujo Disponible vs. Tope de Buffer por Familia")
+        st.markdown(
+            "Este gráfico de barras muestra:\n\n"+
+            "*   **Flujo_Disponible** (azul): Representa el inventario real disponible, ajustado por pedidos en tránsito y demanda comprometida.\n"+
+            "*   **Tope_Buffer** (naranja): Es el nivel máximo deseado del buffer de inventario, incluyendo las zonas Roja, Amarilla y Verde, que indica la capacidad máxima de inventario antes de considerarse un exceso.\n\n"+
+            "Al comparar estas dos métricas, se puede identificar visualmente qué familias tienen un inventario por debajo, dentro o por encima de su nivel óptimo, ayudando a tomar decisiones sobre reabastecimiento o liquidación de stock."
+        )
 
-```markdown
-Este gráfico de barras muestra:
+        fig_buffer, ax_buffer = plt.subplots(figsize=(12, 6))
+        sns.barplot(x='Familia', y='value', hue='variable', data=pd.melt(df, id_vars=['Familia'], value_vars=['Flujo_Disponible', 'Tope_Buffer']), ax=ax_buffer)
+        ax_buffer.set_title('Comparación de Flujo Disponible vs. Tope de Buffer por Familia')
+        ax_buffer.set_xlabel('Familia')
+        ax_buffer.set_ylabel('Cantidad')
+        ax_buffer.tick_params(axis='x', rotation=45)
+        ax_buffer.legend(title='Métrica')
+        plt.tight_layout()
+        st.pyplot(fig_buffer)
 
-*   **Flujo_Disponible** (azul): Representa el inventario real disponible, ajustado por pedidos en tránsito y demanda comprometida.
-*   **Tope_Buffer** (naranja): Es el nivel máximo deseado del buffer de inventario, incluyendo las zonas Roja, Amarilla y Verde, que indica la capacidad máxima de inventario antes de considerarse un exceso.
+        # --- Visualización 2: Resumen de Artículos por Estado de Semáforo Comercial ---
+        st.subheader("🚦 Resumen de Artículos por Estado de Semáforo Comercial")
+        st.markdown("Esta tabla muestra la cantidad de familias de productos en cada estado del semáforo comercial (Crítico, Precaución, Exceso, Saludable).")
+        st.dataframe(df['Semaforo_Comercial'].value_counts().reset_index().rename(columns={'index': 'Estado del Semáforo', 'Semaforo_Comercial': 'Cantidad de Familias'}))
 
-Al comparar estas dos métricas, se puede identificar visualmente qué familias tienen un inventario por debajo, dentro o por encima de su nivel óptimo, ayudando a tomar decisiones sobre reabastecimiento o liquidación de stock.
-```
+    elif seccion_comercializacion == 'Detalle de Familias':
+        # --- Interfaz Interactiva para seleccionar una Familia y mostrar su información ---
+        st.subheader("🔍 Información Detallada por Familia (Interactiva)")
+        st.markdown("Selecciona una familia de la lista para ver su información DDMRP detallada.")
+
+        familia_seleccionada = st.radio(
+            'Selecciona una Familia:',
+            options=df['Familia'].tolist(),
+            index=0 # Default to the first family
+        )
+
+        if familia_seleccionada:
+            info_familia = df[df['Familia'] == familia_seleccionada][columnas_tesis]
+            st.write(f"#### Información detallada para {familia_seleccionada}")
+            st.dataframe(info_familia)
+
+    elif seccion_comercializacion == 'Resumen de Acciones':
+        # --- Resumen General de Acciones Sugeridas ---
+        st.subheader("📋 Resumen General de Acciones Sugeridas")
+        st.markdown("Aquí tienes un resumen consolidado que te indica qué acciones tomar (reponer, mantener, campañas) y los totales de unidades disponibles para cada tipo de acción, según el `Semaforo_Comercial`.")
+        st.dataframe(resumen_final)
+
+elif modulo_seleccionado == finanzas_label:
+    st.title("💰 Módulo de Finanzas")
+    st.markdown("Aquí puedes visualizar las fechas de reposición, pagos tentativos de crédito e impuestos relacionados con las órdenes de compra.")
+
+    st.subheader("📅 Fechas de Reposición y Pagos")
+    st.markdown("""
+        Esta tabla muestra las fechas clave para la planificación financiera de reposiciones:
+
+        *   **Fecha_Reposicion_Estimada**: La fecha aproximada en la que el producto reordenado debería llegar al almacén.
+        *   **Fecha_Pago_Tentativa**: La fecha estimada en que se realizará el pago al agente de carga, considerando un crédito de 30 días.
+        *   **Total_Impuestos_Pagar**: El monto estimado de impuestos (IGV y Ad Valorem) que deben ser pagados al momento del arribo de la mercadería (pago en efectivo).
+        *   **MOQ**: Las unidades mínimas a ordenar por familia.
+    """)
+
+    if not df_finanzas.empty:
+        st.dataframe(df_finanzas.sort_values(by='Fecha_Reposicion_Estimada'))
+
+        st.subheader("🚨 Alerta de Pagos Inmediatos (Impuestos)")
+        st.markdown("Los siguientes ítems han llegado o están por llegar y requieren el pago inmediato de impuestos y ad valorem.")
+        df_impuestos_pendientes = df_finanzas[df_finanzas['Fecha_Reposicion_Estimada'] <= date.today()]
+
+        if not df_impuestos_pendientes.empty:
+            st.error("¡ALERTA! Impuestos y Ad Valorem pendientes de pago para las siguientes familias:")
+            st.dataframe(df_impuestos_pendientes[['Familia', 'Fecha_Reposicion_Estimada', 'Total_Impuestos_Pagar']])
+            st.session_state.pago_impuestos_pendiente = True
+        else:
+            st.success("No hay impuestos pendientes de pago por arribo de mercadería hoy.")
+            st.session_state.pago_impuestos_pendiente = False
+    else:
+        st.info("No hay reposiciones programadas que requieran análisis financiero en este momento.")
+
+elif modulo_seleccionado == 'Inventario':
+    st.title("📦 Módulo de Inventario")
+    st.markdown("Análisis detallado del inventario, incluyendo clasificación ABC, rotación de productos y estado de stock físico.")
+
+    st.subheader("📊 Análisis de Inventario (Clasificación ABC, Rotación y Estado de Stock)")
+    st.markdown(
+        "Aquí se presenta un análisis de inventario con las siguientes métricas:\n\n" +
+        "*   **Stock_Fisico**: Cantidad actual de unidades en inventario.\n" +
+        "*   **Semaforo_Stock_Fisico**: Indicador visual del estado del stock físico (🔴 Crítico, 🟡 Precaución, 🟢 Saludable, 🔵 Exceso) en relación con los niveles de buffer DDMRP.\n" +
+        "*   **Clasificacion_ABC**: Categorización de los productos basada en su valor de ventas anual. " +
+        "Los productos 'A' son los más valiosos (representan hasta el 80% de las ventas), " +
+        "'B' son los siguientes (hasta el 95%), y 'C' son el resto.\n" +
+        "*   **Rotacion_Inventario**: Mide cuántas veces el inventario promedio se vende y se reemplaza en un año. " +
+        "Una rotación alta generalmente indica una buena gestión de inventario, mientras que una baja podría señalar exceso de stock o baja demanda.\n" +
+        "*   **Valor_Inventario_Actual**: El valor monetario total del stock físico actual de cada familia de productos."
+    )
+
+    # Columnas relevantes para el módulo de Inventario
+    columnas_inventario = [
+        'Familia', 'Stock_Fisico', 'Semaforo_Stock_Fisico',
+        'Clasificacion_ABC', 'Venta_Anualizada_Unidades',
+        'Rotacion_Inventario', 'Valor_Inventario_Actual'
+    ]
+    st.dataframe(df[columnas_inventario].sort_values(by='Clasificacion_ABC')) # Ordenar por ABC para mejor visualización
+
+    st.subheader("🛒 Gestión de Reposición (Clase A)")
+    st.markdown("Selecciona familias de 'Clase A' que requieren reposición para enviar una orden de compra simulada a Finanzas y Comercial.")
+
+    df_clase_a_necesidad = df[
+        (df['Clasificacion_ABC'] == 'A') &
+        (df['Semaforo_Comercial'].isin([
+            "🔴 CRÍTICO: Proteger Stock / Ofrecer Sustituto",
+            "🟡 PRECAUCIÓN: En Reposición / No promocionar"
+        ]))
+    ][['Familia', 'Semaforo_Comercial', 'Stock_Fisico', 'Punto_Reposicion', 'MOQ']]
+
+    if not df_clase_a_necesidad.empty:
+        st.dataframe(df_clase_a_necesidad)
+
+        familias_a_reponer = st.multiselect(
+            "Selecciona las familias 'Clase A' a reponer:",
+            options=df_clase_a_necesidad['Familia'].tolist()
+        )
+
+        if familias_a_reponer:
+            st.markdown("#### Detalles de la Orden Propuesta:")
+            orden_propuesta = []
+            for familia in familias_a_reponer:
+                moq = df_clase_a_necesidad[df_clase_a_necesidad['Familia'] == familia]['MOQ'].iloc[0]
+                orden_propuesta.append({'Familia': familia, 'Cantidad_MOQ': int(moq)})
+
+            st.dataframe(pd.DataFrame(orden_propuesta))
+
+            if st.button("Simular Envío de Orden a Finanzas/Comercial"):
+                st.session_state.pago_impuestos_pendiente = True
+                st.success("Orden simulada enviada. Verifica el módulo de Finanzas para detalles de pago.")
+        else:
+            st.info("Selecciona una o más familias para proponer una orden de reposición.")
+
+    else:
+        st.info("No hay familias 'Clase A' en estado crítico o de precaución que requieran reposición en este momento.")
+
+elif modulo_seleccionado == 'Distribución':
+    st.title("🚚 Módulo de Distribución")
+    st.markdown("Visualiza el stock simulado de cada familia de productos en diferentes tiendas.")
+
+    st.subheader("📍 Stock por Tienda")
+    st.markdown("Selecciona una tienda para ver el stock simulado de cada familia de productos en esa ubicación.")
+
+    tienda_seleccionada = st.selectbox(
+        "Selecciona una tienda:",
+        options=tiendas
+    )
+
+    if tienda_seleccionada:
+        stock_tienda_actual = df_stock_tiendas[df_stock_tiendas['Tienda'] == tienda_seleccionada]
+        st.dataframe(stock_tienda_actual.set_index('Familia'))
