@@ -434,4 +434,10 @@ elif modulo_seleccionado == 'Distribución':
     if tienda_seleccionada:
         st.write(f"### Stock detallado para {tienda_seleccionada}:")
         stock_tienda_actual = df_stock_tiendas[df_stock_tiendas['Tienda'] == tienda_seleccionada].copy()
-        st.dataframe(stock_tienda_actual[['Familia', 'Stock_Tienda']].reset_index(drop=True))
+        
+        # Función para aplicar el estilo condicional
+        def highlight_low_stock(row):
+            color = '#ffcccc' if row['Stock_Tienda'] < 40 else '' # Rojo suave
+            return [f'background-color: {color}' for _ in row]
+
+        st.dataframe(stock_tienda_actual[['Familia', 'Stock_Tienda']].style.apply(highlight_low_stock, axis=1))
